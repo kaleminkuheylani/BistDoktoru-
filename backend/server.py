@@ -562,30 +562,343 @@ async def get_watchlist_with_data():
     return stocks
 
 # ========================
-# Chatbot Endpoint
+# Analysis Tools & Endpoints
+# ========================
+
+# Sector definitions for Turkish stocks
+SECTOR_DATA = {
+    "Havacılık": ["THYAO", "PGSUS"],
+    "Finans": ["GARAN", "AKBNK", "ISCTR"],
+    "Çelik": ["EREGL"],
+    "Cam": ["SISE"],
+    "Savunma": ["ASELS"],
+    "Holding": ["KCHOL", "SAHOL"],
+    "Enerji": ["TUPRS", "PETKM"],
+    "Perakende": ["BIMAS"],
+    "Telekomünikasyon": ["TCELL"],
+    "Madencilik": ["KOZAL"],
+    "Otomotiv": ["FROTO", "TOASO"],
+    "Tarım": ["HEKTS"],
+    "İnşaat": ["ENKAI"],
+    "Beyaz Eşya": ["VESTL"]
+}
+
+# Reverse mapping: symbol to sector
+SYMBOL_TO_SECTOR = {}
+for sector, symbols in SECTOR_DATA.items():
+    for symbol in symbols:
+        SYMBOL_TO_SECTOR[symbol] = sector
+
+async def get_sector_pe_analysis(sector: str = None) -> dict:
+    """Calculate P/E ratios by sector"""
+    all_stocks = []
+    tasks = [fetch_yahoo_quote(s["symbol"]) for s in POPULAR_STOCKS]
+    results = await asyncio.gather(*tasks)
+    
+    for stock_info, quote_data in zip(POPULAR_STOCKS, results):
+        if quote_data:
+            symbol = stock_info["symbol"]
+            stock_sector = SYMBOL_TO_SECTOR.get(symbol, "Diğer")
+            details = await fetch_yahoo_details(symbol)
+            
+            all_stocks.append({
+                "symbol": symbol,
+                "name": stock_info["name"],
+                "sector": stock_sector,
+                "price": quote_data.get("price", 0),
+                "pe_ratio": details.get("pe_ratio") if details else None,
+                "market_cap": details.get("market_cap") if details else None,
+                "eps": details.get("eps") if details else None
+            })
+    
+    # Group by sector
+    sector_analysis = {}
+    for stock in all_stocks:
+        s = stock["sector"]
+        if s not in sector_analysis:
+            sector_analysis[s] = {"stocks": [], "avg_pe": 0, "total_market_cap": 0}
+        sector_analysis[s]["stocks"].append(stock)
+    
+    # Calculate averages
+    for s, data in sector_analysis.items():
+        pe_values = [st["pe_ratio"] for st in data["stocks"] if st["pe_ratio"]]
+        data["avg_pe"] = round(sum(pe_values) / len(pe_values), 2) if pe_values else 0
+        data["total_market_cap"] = sum(st["market_cap"] or 0 for st in data["stocks"])
+        data["stock_count"] = len(data["stocks"])
+    
+    if sector:
+        return {sector: sector_analysis.get(sector, {})}
+    return sector_analysis
+
+async def get_stock_depth_analysis(symbol: str) -> dict:
+    """Perform depth analysis on a stock"""
+    symbol = symbol.upper()
+    stock_info = next((s for s in POPULAR_STOCKS if s["symbol"] == symbol), None)
+    
+    if not stock_info:
+        return {"error": "Hisse bulunamadı"}
+    
+    # Get current quote
+    quote = await fetch_yahoo_quote(symbol)
+    details = await fetch_yahoo_details(symbol)
+    history = await fetch_yahoo_history(symbol, "3mo")
+    
+    if not quote:
+        return {"error": "Veri alınamadı"}
+    
+    # Calculate technical indicators from history
+    closes = [h["close"] for h in history] if history else []
+    volumes = [h["volume"] for h in history] if history else []
+    
+    # Simple Moving Averages
+    sma_20 = round(sum(closes[-20:]) / 20, 2) if len(closes) >= 20 else None
+    sma_50 = round(sum(closes[-50:]) / 50, 2) if len(closes) >= 50 else None
+    
+    # Average volume
+    avg_volume = int(sum(volumes[-20:]) / 20) if len(volumes) >= 20 else None
+    
+    # Volatility (standard deviation of returns)
+    if len(closes) >= 20:
+        returns = [(closes[i] - closes[i-1]) / closes[i-1] for i in range(1, len(closes))]
+        volatility = round((sum((r - sum(returns)/len(returns))**2 for r in returns) / len(returns)) ** 0.5 * 100, 2)
+    else:
+        volatility = None
+    
+    # RSI calculation (simplified)
+    if len(closes) >= 14:
+        gains = []
+        losses = []
+        for i in range(1, 15):
+            change = closes[-i] - closes[-i-1]
+            if change > 0:
+                gains.append(change)
+            else:
+                losses.append(abs(change))
+        avg_gain = sum(gains) / 14
+        avg_loss = sum(losses) / 14 if losses else 0.001
+        rs = avg_gain / avg_loss
+        rsi = round(100 - (100 / (1 + rs)), 2)
+    else:
+        rsi = None
+    
+    # Price position
+    price = quote.get("price", 0)
+    high_52w = quote.get("fifty_two_week_high", price)
+    low_52w = quote.get("fifty_two_week_low", price)
+    price_position = round((price - low_52w) / (high_52w - low_52w) * 100, 2) if high_52w != low_52w else 50
+    
+    # Sector comparison
+    sector = SYMBOL_TO_SECTOR.get(symbol, "Diğer")
+    sector_pe = await get_sector_pe_analysis(sector)
+    sector_avg_pe = sector_pe.get(sector, {}).get("avg_pe", 0)
+    
+    pe_ratio = details.get("pe_ratio") if details else None
+    pe_vs_sector = None
+    if pe_ratio and sector_avg_pe:
+        pe_vs_sector = "Ucuz" if pe_ratio < sector_avg_pe else "Pahalı"
+    
+    return {
+        "symbol": symbol,
+        "name": stock_info["name"],
+        "sector": sector,
+        "current_price": price,
+        "change_percent": quote.get("change_percent", 0),
+        
+        # Fundamental Analysis
+        "fundamental": {
+            "pe_ratio": pe_ratio,
+            "sector_avg_pe": sector_avg_pe,
+            "pe_vs_sector": pe_vs_sector,
+            "market_cap": details.get("market_cap") if details else None,
+            "eps": details.get("eps") if details else None,
+            "dividend_yield": details.get("dividend_yield") if details else None,
+        },
+        
+        # Technical Analysis
+        "technical": {
+            "sma_20": sma_20,
+            "sma_50": sma_50,
+            "rsi": rsi,
+            "rsi_signal": "Aşırı Alım" if rsi and rsi > 70 else ("Aşırı Satım" if rsi and rsi < 30 else "Nötr") if rsi else None,
+            "volatility": volatility,
+            "avg_volume_20d": avg_volume,
+            "current_volume": quote.get("volume"),
+            "volume_trend": "Yüksek" if quote.get("volume", 0) > (avg_volume or 0) * 1.5 else "Normal" if avg_volume else None,
+        },
+        
+        # Price Analysis
+        "price_analysis": {
+            "52w_high": high_52w,
+            "52w_low": low_52w,
+            "price_position_52w": price_position,
+            "position_text": "52 haftalık aralığın %{:.0f}'unda".format(price_position),
+            "trend": "Yükseliş" if sma_20 and price > sma_20 else "Düşüş" if sma_20 else None,
+        },
+        
+        "analysis_date": datetime.now(timezone.utc).isoformat(),
+        "disclaimer": "Bu analiz eğitim amaçlıdır, yatırım tavsiyesi değildir."
+    }
+
+@api_router.get("/analysis/sector-pe")
+async def api_sector_pe_analysis(sector: str = None):
+    """Get P/E analysis by sector"""
+    return await get_sector_pe_analysis(sector)
+
+@api_router.get("/analysis/depth/{symbol}")
+async def api_depth_analysis(symbol: str):
+    """Get depth analysis for a stock"""
+    return await get_stock_depth_analysis(symbol)
+
+@api_router.get("/analysis/compare")
+async def api_compare_stocks(symbols: str = Query(..., description="Comma-separated stock symbols")):
+    """Compare multiple stocks"""
+    symbol_list = [s.strip().upper() for s in symbols.split(",")][:5]  # Max 5 stocks
+    
+    comparisons = []
+    for symbol in symbol_list:
+        analysis = await get_stock_depth_analysis(symbol)
+        if "error" not in analysis:
+            comparisons.append({
+                "symbol": analysis["symbol"],
+                "name": analysis["name"],
+                "sector": analysis["sector"],
+                "price": analysis["current_price"],
+                "change_percent": analysis["change_percent"],
+                "pe_ratio": analysis["fundamental"]["pe_ratio"],
+                "rsi": analysis["technical"]["rsi"],
+                "trend": analysis["price_analysis"]["trend"]
+            })
+    
+    return {"stocks": comparisons, "count": len(comparisons)}
+
+@api_router.get("/tools/price/{symbol}")
+async def get_stock_price_tool(symbol: str):
+    """Get current stock price - tool for chatbot"""
+    quote = await fetch_yahoo_quote(symbol.upper())
+    if quote:
+        return {
+            "symbol": symbol.upper(),
+            "price": quote.get("price"),
+            "change": quote.get("change"),
+            "change_percent": quote.get("change_percent"),
+            "high": quote.get("high"),
+            "low": quote.get("low"),
+            "volume": quote.get("volume")
+        }
+    return {"error": "Veri bulunamadı"}
+
+@api_router.get("/tools/history/{symbol}")
+async def get_stock_history_tool(symbol: str, period: str = "1mo"):
+    """Get stock history - tool for chatbot"""
+    history = await fetch_yahoo_history(symbol.upper(), period)
+    if history:
+        return {
+            "symbol": symbol.upper(),
+            "period": period,
+            "data_points": len(history),
+            "latest": history[-1] if history else None,
+            "oldest": history[0] if history else None,
+            "price_change": round(history[-1]["close"] - history[0]["close"], 2) if len(history) > 1 else 0,
+            "price_change_percent": round((history[-1]["close"] - history[0]["close"]) / history[0]["close"] * 100, 2) if len(history) > 1 else 0
+        }
+    return {"error": "Geçmiş veri bulunamadı"}
+
+# ========================
+# Chatbot Endpoint with Tools
 # ========================
 
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat_with_bot(request: ChatRequest):
-    """Chat with AI stock market assistant"""
+    """Chat with AI stock market assistant with tool access"""
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     
     session_id = request.session_id or str(uuid.uuid4())
+    user_msg = request.message.lower()
     
-    system_message = """Sen "Bist Doktoru", Türk borsası (BIST) konusunda uzman bir yapay zeka asistanısın.
+    # Check if user is asking about specific stock price
+    context_data = ""
+    
+    # Detect stock symbols in message
+    mentioned_symbols = [s["symbol"] for s in POPULAR_STOCKS if s["symbol"].lower() in user_msg or s["name"].lower() in user_msg]
+    
+    if mentioned_symbols:
+        symbol = mentioned_symbols[0]
+        
+        # Check for specific queries
+        if any(word in user_msg for word in ["fiyat", "kaç", "ne kadar", "değer"]):
+            quote = await fetch_yahoo_quote(symbol)
+            if quote:
+                context_data = f"\n\n[GÜNCEL VERİ] {symbol} Hisse Bilgisi:\n- Fiyat: ₺{quote.get('price', 0)}\n- Değişim: %{quote.get('change_percent', 0)}\n- Günlük Yüksek: ₺{quote.get('high', 0)}\n- Günlük Düşük: ₺{quote.get('low', 0)}\n- Hacim: {quote.get('volume', 0):,}\n"
+        
+        elif any(word in user_msg for word in ["analiz", "değerlendir", "incele", "derinlik"]):
+            analysis = await get_stock_depth_analysis(symbol)
+            if "error" not in analysis:
+                context_data = f"""
+[DERİNLİK ANALİZİ] {symbol} - {analysis.get('name', '')}
+Sektör: {analysis.get('sector', 'Bilinmiyor')}
+Fiyat: ₺{analysis.get('current_price', 0)} ({analysis.get('change_percent', 0)}%)
+
+TEMEL ANALİZ:
+- F/K Oranı: {analysis['fundamental'].get('pe_ratio', 'N/A')}
+- Sektör Ort. F/K: {analysis['fundamental'].get('sector_avg_pe', 'N/A')}
+- Değerleme: {analysis['fundamental'].get('pe_vs_sector', 'N/A')}
+- Piyasa Değeri: {analysis['fundamental'].get('market_cap', 'N/A')}
+
+TEKNİK ANALİZ:
+- RSI: {analysis['technical'].get('rsi', 'N/A')} ({analysis['technical'].get('rsi_signal', '')})
+- 20 Günlük SMA: ₺{analysis['technical'].get('sma_20', 'N/A')}
+- Volatilite: %{analysis['technical'].get('volatility', 'N/A')}
+- Hacim Trendi: {analysis['technical'].get('volume_trend', 'N/A')}
+
+FİYAT ANALİZİ:
+- 52H Yüksek: ₺{analysis['price_analysis'].get('52w_high', 'N/A')}
+- 52H Düşük: ₺{analysis['price_analysis'].get('52w_low', 'N/A')}
+- Pozisyon: {analysis['price_analysis'].get('position_text', 'N/A')}
+- Trend: {analysis['price_analysis'].get('trend', 'N/A')}
+"""
+        
+        elif any(word in user_msg for word in ["geçmiş", "tarihçe", "history", "grafik"]):
+            history = await fetch_yahoo_history(symbol, "1mo")
+            if history:
+                latest = history[-1] if history else {}
+                oldest = history[0] if history else {}
+                change = round(latest.get("close", 0) - oldest.get("close", 0), 2)
+                change_pct = round(change / oldest.get("close", 1) * 100, 2)
+                context_data = f"\n\n[GEÇMİŞ VERİ] {symbol} Son 1 Ay:\n- Başlangıç: ₺{oldest.get('close', 'N/A')} ({oldest.get('date', '')})\n- Son: ₺{latest.get('close', 'N/A')} ({latest.get('date', '')})\n- Değişim: ₺{change} (%{change_pct})\n- Veri Sayısı: {len(history)} gün\n"
+    
+    # Check for sector analysis
+    if any(word in user_msg for word in ["sektör", "sektor", "karşılaştır", "f/k", "fk"]):
+        sector_data = await get_sector_pe_analysis()
+        sector_summary = "\n[SEKTÖR F/K ANALİZİ]\n"
+        for sector, data in sorted(sector_data.items(), key=lambda x: x[1].get("avg_pe", 0) or 0):
+            if data.get("avg_pe"):
+                sector_summary += f"- {sector}: Ort. F/K {data['avg_pe']}, {data['stock_count']} hisse\n"
+        context_data += sector_summary
+    
+    system_message = f"""Sen "Bist Doktoru", Türk borsası (BIST) konusunda uzman bir yapay zeka asistanısın.
+
+KULLANDIĞIN ARAÇLAR:
+1. Fiyat Sorgulama: Anlık hisse fiyatı, değişim, hacim bilgisi
+2. Derinlik Analizi: F/K oranı, RSI, SMA, volatilite, sektör karşılaştırması
+3. Geçmiş Veri: Tarihsel fiyat hareketleri
+4. Sektör Analizi: Sektörel F/K karşılaştırması
 
 Görevlerin:
 - Türk borsası ve hisse senetleri hakkında sorulara yanıt vermek
 - Temel analiz kavramlarını açıklamak (F/K oranı, piyasa değeri, temettü verimi vb.)
-- Teknik analiz terimlerini basitçe anlatmak
+- Teknik analiz terimlerini basitçe anlatmak (RSI, SMA, destek/direnç)
+- Sektörel karşılaştırmalar yapmak
 - Genel yatırım stratejileri hakkında eğitici bilgi vermek
+
+TAKİP EDİLEN HİSSELER: THYAO, GARAN, AKBNK, EREGL, SISE, ASELS, KCHOL, SAHOL, ISCTR, TUPRS, BIMAS, PGSUS, TCELL, KOZAL, FROTO, TOASO, PETKM, HEKTS, ENKAI, VESTL
 
 ÖNEMLİ UYARILAR:
 - Bu platform eğitim amaçlıdır, yatırım tavsiyesi değildir
 - Kesinlikle "al" veya "sat" tavsiyesi verme
 - Her zaman "yatırım kararlarınızı profesyonel danışmanlarla görüşerek verin" uyarısı ekle
 - Türkçe yanıt ver
-- Kısa ve öz ol"""
+- Kısa ve öz ol
+{context_data}"""
 
     try:
         chat = LlmChat(
