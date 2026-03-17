@@ -117,6 +117,16 @@ POPULAR_STOCKS = [
 ]
 
 import random
+from twelvedata import TDClient
+
+# Initialize Twelve Data client
+TWELVE_DATA_API_KEY = os.environ.get('TWELVE_DATA_API_KEY')
+td_client = TDClient(apikey=TWELVE_DATA_API_KEY) if TWELVE_DATA_API_KEY else None
+
+# Cache for stock data to reduce API calls
+stock_cache = {}
+cache_timestamp = {}
+CACHE_DURATION = 300  # 5 minutes cache to respect API limits
 
 # Mock data for stocks when API is unavailable
 MOCK_STOCK_DATA = {
@@ -166,45 +176,75 @@ def get_mock_quote(symbol: str) -> dict:
         "fifty_two_week_low": round(base["price"] * 0.65, 2),
     }
 
-async def fetch_yahoo_quote(symbol: str) -> Optional[dict]:
-    """Fetch stock quote from Yahoo Finance with mock fallback"""
-    yahoo_symbol = f"{symbol}.IS"
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
-    params = {"interval": "1d", "range": "1d"}
+async def fetch_twelve_data_quote(symbol: str) -> Optional[dict]:
+    """Fetch stock quote from Twelve Data API"""
+    if not td_client:
+        return None
+    
+    # Check cache
+    cache_key = f"quote_{symbol}"
+    if cache_key in stock_cache:
+        if (datetime.now(timezone.utc).timestamp() - cache_timestamp.get(cache_key, 0)) < CACHE_DURATION:
+            return stock_cache[cache_key]
     
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(url, params=params)
-            if response.status_code == 200:
-                data = response.json()
-                result = data.get("chart", {}).get("result", [])
-                if result:
-                    meta = result[0].get("meta", {})
-                    
-                    current_price = meta.get("regularMarketPrice", 0)
-                    if current_price > 0:
-                        prev_close = meta.get("previousClose", current_price)
-                        change = current_price - prev_close
-                        change_percent = (change / prev_close * 100) if prev_close else 0
-                        
-                        return {
-                            "symbol": symbol,
-                            "price": round(current_price, 2),
-                            "change": round(change, 2),
-                            "change_percent": round(change_percent, 2),
-                            "high": round(meta.get("regularMarketDayHigh", 0), 2),
-                            "low": round(meta.get("regularMarketDayLow", 0), 2),
-                            "open_price": round(meta.get("regularMarketOpen", 0), 2),
-                            "close_price": round(prev_close, 2),
-                            "volume": meta.get("regularMarketVolume", 0),
-                            "fifty_two_week_high": round(meta.get("fiftyTwoWeekHigh", 0), 2),
-                            "fifty_two_week_low": round(meta.get("fiftyTwoWeekLow", 0), 2),
-                        }
+        # Twelve Data uses symbol format like "THYAO" with exchange "XIST"
+        ts = td_client.time_series(
+            symbol=symbol,
+            exchange="XIST",
+            interval="1day",
+            outputsize=2
+        )
+        df = ts.as_pandas()
+        
+        if df is not None and len(df) > 0:
+            latest = df.iloc[0]
+            prev = df.iloc[1] if len(df) > 1 else df.iloc[0]
+            
+            current_price = float(latest['close'])
+            prev_close = float(prev['close'])
+            change = current_price - prev_close
+            change_percent = (change / prev_close * 100) if prev_close else 0
+            
+            result = {
+                "symbol": symbol,
+                "price": round(current_price, 2),
+                "change": round(change, 2),
+                "change_percent": round(change_percent, 2),
+                "high": round(float(latest['high']), 2),
+                "low": round(float(latest['low']), 2),
+                "open_price": round(float(latest['open']), 2),
+                "close_price": round(prev_close, 2),
+                "volume": int(latest['volume']) if 'volume' in latest else 0,
+                "fifty_two_week_high": round(current_price * 1.2, 2),
+                "fifty_two_week_low": round(current_price * 0.8, 2),
+            }
+            
+            # Update cache
+            stock_cache[cache_key] = result
+            cache_timestamp[cache_key] = datetime.now(timezone.utc).timestamp()
+            
+            return result
     except Exception as e:
-        logging.debug(f"Yahoo API unavailable for {symbol}, using mock data: {e}")
+        logging.warning(f"Twelve Data API error for {symbol}: {e}")
     
-    # Return mock data as fallback
+    return None
+
+async def fetch_stock_quote(symbol: str) -> Optional[dict]:
+    """Fetch stock quote - tries Twelve Data first, then mock data"""
+    # Try Twelve Data API first
+    result = await fetch_twelve_data_quote(symbol)
+    if result:
+        logging.info(f"Got real data for {symbol} from Twelve Data")
+        return result
+    
+    # Fall back to mock data
+    logging.info(f"Using mock data for {symbol}")
     return get_mock_quote(symbol)
+
+async def fetch_yahoo_quote(symbol: str) -> Optional[dict]:
+    """Fetch stock quote - uses Twelve Data or mock fallback"""
+    return await fetch_stock_quote(symbol)
 
 async def fetch_yahoo_details(symbol: str) -> Optional[dict]:
     """Fetch detailed stock info - returns mock data for educational purposes"""
@@ -235,8 +275,56 @@ async def fetch_yahoo_details(symbol: str) -> Optional[dict]:
         "description": f"{symbol} Borsa İstanbul'da işlem gören bir Türk şirketidir. Bu veriler eğitim amaçlıdır ve gerçek zamanlı değildir."
     }
 
+async def fetch_twelve_data_history(symbol: str, period: str = "1mo") -> List[dict]:
+    """Fetch historical data from Twelve Data API"""
+    if not td_client:
+        return []
+    
+    # Map period to outputsize
+    period_map = {
+        "1d": 1, "5d": 5, "1mo": 22, "3mo": 66, 
+        "6mo": 132, "1y": 252, "2y": 504, "5y": 1260, "max": 2000
+    }
+    outputsize = period_map.get(period, 22)
+    
+    try:
+        ts = td_client.time_series(
+            symbol=symbol,
+            exchange="XIST",
+            interval="1day",
+            outputsize=outputsize
+        )
+        df = ts.as_pandas()
+        
+        if df is not None and len(df) > 0:
+            history = []
+            for idx, row in df.iterrows():
+                history.append({
+                    "date": idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)[:10],
+                    "open": round(float(row['open']), 2),
+                    "high": round(float(row['high']), 2),
+                    "low": round(float(row['low']), 2),
+                    "close": round(float(row['close']), 2),
+                    "volume": int(row['volume']) if 'volume' in row else 0
+                })
+            # Reverse to get oldest first
+            history.reverse()
+            logging.info(f"Got {len(history)} historical data points for {symbol} from Twelve Data")
+            return history
+    except Exception as e:
+        logging.warning(f"Twelve Data history error for {symbol}: {e}")
+    
+    return []
+
 async def fetch_yahoo_history(symbol: str, period: str = "1mo") -> List[dict]:
-    """Generate mock historical data for educational purposes"""
+    """Fetch historical data - tries Twelve Data first, then mock"""
+    # Try Twelve Data first
+    history = await fetch_twelve_data_history(symbol, period)
+    if history:
+        return history
+    
+    # Fall back to mock data
+    logging.info(f"Using mock historical data for {symbol}")
     from datetime import timedelta
     
     # Generate mock historical data
