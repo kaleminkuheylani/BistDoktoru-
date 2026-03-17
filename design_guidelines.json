@@ -1,0 +1,212 @@
+{
+  "project_name": "Bist Doktoru",
+  "design_philosophy": {
+    "persona": "The Financial Surgeon",
+    "core_concept": "Surgical precision for the Istanbul Stock Exchange. Dark, focused, and data-dense.",
+    "visual_style": "High-contrast dark mode with electric green indicators. Grid-based layouts that prioritize data density over decorative whitespace.",
+    "emotional_tone": "Professional, Trustworthy, Sharp, Analytical"
+  },
+  "theme_strategy": {
+    "mode": "dark",
+    "allow_toggle": false,
+    "reasoning": "Financial terminals are dark by default to reduce eye strain during long analysis sessions. The 'Green' accent pops best against deep obsidian."
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Barlow Condensed, sans-serif",
+      "weights": ["600", "700"],
+      "usage": "Page titles, ticker symbols, key metrics",
+      "tailwind_class": "font-heading tracking-tight"
+    },
+    "body": {
+      "font_family": "Manrope, sans-serif",
+      "weights": ["400", "500"],
+      "usage": "General content, news snippets, chatbot responses",
+      "tailwind_class": "font-sans leading-relaxed"
+    },
+    "data": {
+      "font_family": "JetBrains Mono, monospace",
+      "weights": ["400", "700"],
+      "usage": "Stock prices, percentages, table data",
+      "tailwind_class": "font-mono tracking-tighter"
+    }
+  },
+  "colors": {
+    "palette": {
+      "background": {
+        "name": "Obsidian Deep",
+        "hex": "#050505",
+        "hsl": "0 0% 2%",
+        "tailwind": "bg-background"
+      },
+      "surface": {
+        "name": "Gunmetal Glass",
+        "hex": "#121212",
+        "hsl": "0 0% 7%",
+        "tailwind": "bg-card"
+      },
+      "primary": {
+        "name": "BIST Bull Green",
+        "hex": "#22C55E",
+        "hsl": "142 71% 45%",
+        "tailwind": "bg-primary text-primary-foreground",
+        "usage": "Primary actions, positive price changes, gainers"
+      },
+      "secondary": {
+        "name": "Slate Mute",
+        "hex": "#94A3B8",
+        "hsl": "215 20% 65%",
+        "tailwind": "bg-secondary text-secondary-foreground",
+        "usage": "Secondary data, labels, inactive states"
+      },
+      "accent": {
+        "name": "Signal Green Glow",
+        "hex": "#DCFCE7",
+        "hsl": "142 76% 90%",
+        "tailwind": "bg-accent text-accent-foreground",
+        "usage": "Subtle backgrounds for active items"
+      },
+      "destructive": {
+        "name": "Loss Red",
+        "hex": "#EF4444",
+        "hsl": "0 84% 60%",
+        "tailwind": "bg-destructive text-destructive-foreground",
+        "usage": "Negative price changes, delete actions, errors"
+      },
+      "border": {
+        "name": "Grid Line",
+        "hex": "#27272A",
+        "hsl": "240 4% 16%",
+        "tailwind": "border-border"
+      }
+    },
+    "gradients": {
+      "hero_glow": "radial-gradient(circle at center, rgba(34, 197, 94, 0.15) 0%, rgba(5, 5, 5, 0) 70%)",
+      "chart_fade": "linear-gradient(180deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0) 100%)"
+    }
+  },
+  "spacing_and_layout": {
+    "container_padding": "p-4 md:p-8 lg:p-12",
+    "section_spacing": "gap-8",
+    "border_radius": {
+      "default": "rounded-none",
+      "buttons": "rounded-sm",
+      "cards": "rounded-none"
+    },
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-12 gap-6",
+      "market_overview": "grid grid-cols-1 md:grid-cols-3 gap-6",
+      "list_view": "flex flex-col gap-2"
+    }
+  },
+  "components": {
+    "cards": {
+      "style": "flat",
+      "border": "1px solid rgba(255,255,255,0.08)",
+      "background": "rgba(10,10,10,0.6)",
+      "backdrop_filter": "blur(12px)",
+      "hover": "border-primary/30 transition-colors duration-300"
+    },
+    "buttons": {
+      "primary": "bg-primary text-black font-bold uppercase tracking-wide hover:bg-primary/90 shadow-[0_0_15px_rgba(34,197,94,0.3)]",
+      "secondary": "border border-input bg-transparent hover:bg-accent hover:text-accent-foreground"
+    },
+    "inputs": {
+      "style": "bg-black/20 border-border focus:border-primary focus:ring-1 focus:ring-primary rounded-none"
+    },
+    "tables": {
+      "header": "text-xs uppercase tracking-wider text-muted-foreground font-semibold",
+      "row": "hover:bg-white/5 transition-colors border-b border-white/5",
+      "cell": "py-4 font-mono text-sm"
+    },
+    "trading_view_widget": {
+      "wrapper_class": "w-full h-[600px] border border-border bg-card relative overflow-hidden",
+      "theme": "dark"
+    },
+    "chatbot": {
+      "container": "fixed bottom-6 right-6 w-96 h-[500px] bg-card border border-border shadow-2xl z-50 flex flex-col",
+      "message_user": "bg-primary/10 text-primary-foreground self-end rounded-tl-lg rounded-bl-lg rounded-br-lg p-3 max-w-[80%]",
+      "message_bot": "bg-muted text-foreground self-start rounded-tr-lg rounded-bl-lg rounded-br-lg p-3 max-w-[80%]"
+    }
+  },
+  "visual_enhancers": {
+    "textures": {
+      "noise": "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E\")"
+    },
+    "effects": {
+      "glass": "backdrop-blur-md bg-black/40 border border-white/10",
+      "scanline": "background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1)); background-size: 100% 4px;"
+    }
+  },
+  "image_urls": {
+    "hero_backgrounds": [
+      {
+        "url": "https://images.unsplash.com/photo-1770329926253-eedb55c57442?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTB8MHwxfHNlYXJjaHwzfHxpc3RhbmJ1bCUyMGZpbmFuY2UlMjBza3lsaW5lJTIwbmlnaHR8ZW58MHx8fHwxNzczNzg4MDcyfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Istanbul Minarets at Twilight - Use for Landing Page Hero overlay",
+        "category": "landing_hero"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1719082993979-c4a36d62efad?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTB8MHwxfHNlYXJjaHw0fHxpc3RhbmJ1bCUyMGZpbmFuY2UlMjBza3lsaW5lJTIwbmlnaHR8ZW58MHx8fHwxNzczNzg4MDcyfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Istanbul City Bridge Night - Alternative Hero",
+        "category": "landing_hero_alt"
+      }
+    ],
+    "abstract_finance": [
+      {
+        "url": "https://images.unsplash.com/photo-1762279389020-eeeb69c25813?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwxfHxzdG9jayUyMG1hcmtldCUyMGRhdGElMjBkaWdpdGFsJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzczNzg4MDcxfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Glowing Data Lines - Use for 'Market Overview' section background or AI Chatbot header",
+        "category": "section_bg"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1647067517631-aa36cda58a17?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwyfHxzdG9jayUyMG1hcmtldCUyMGRhdGElMjBkaWdpdGFsJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzczNzg4MDcxfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Digital Numbers Macro - Use for Educational Content headers",
+        "category": "content_header"
+      }
+    ]
+  },
+  "icons": {
+    "library": "lucide-react",
+    "recommendations": {
+      "dashboard": "LayoutDashboard",
+      "stocks": "TrendingUp",
+      "watchlist": "Eye",
+      "chat": "Bot",
+      "settings": "Settings",
+      "search": "Search",
+      "arrow_up": "ArrowUpRight",
+      "arrow_down": "ArrowDownRight"
+    }
+  },
+  "instructions_to_main_agent": {
+    "setup": [
+      "Install dependencies: `yarn add lucide-react recharts framer-motion clsx tailwind-merge`",
+      "Update `tailwind.config.js` with the provided color palette (obsidian/green).",
+      "Ensure `index.css` applies the dark theme by default.",
+      "Install Shadcn components: `npx shadcn-ui@latest init` (yes to defaults, but overwrite colors later)."
+    ],
+    "layout_rules": [
+      "Use the 'Bento Grid' for the dashboard. The 'Popular Stocks' should be a large 2x2 card.",
+      "The 'Chatbot' should be a persistent floating action button (FAB) that expands into a dialog.",
+      "The 'Stock Detail' page must prioritize the TradingView widget (use `react-tradingview-widget` or iframe).",
+      "Ensure the app is fully responsive. Tables should scroll horizontally on mobile."
+    ],
+    "data_handling": [
+      "Mock the `borsa-api` responses if the API is not connected yet, but design the UI to handle real-time flickers (green/red flashes on price change).",
+      "All numeric data must be formatted (e.g., '1.234,56 ₺'). Turkish locale."
+    ],
+    "specific_pages": {
+      "home": "Hero section with Istanbul night image + value prop. Below: Top Gainers/Losers cards.",
+      "dashboard": "Dense data view. Sidebar nav. Main content: 'Market at a Glance'.",
+      "stock_detail": "Header: Ticker + Price + Big % Change. Body: Full width TradingView Chart. Footer: Fundamentals grid.",
+      "education": "Simple blog layout. Cards with 'Digital Numbers' images."
+    }
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do NOT use gradients for text. It lowers readability.",
+    "Do NOT use centered text for long paragraphs. Left align always.",
+    "Use `data-testid` on all interactive elements (buttons, inputs, links).",
+    "Use `sonner` for toast notifications.",
+    "If a component needs to be created, check `src/components/ui` first.",
+    "Animations: Use `framer-motion` for page transitions and list entry animations (staggered)."
+  ]
+}
