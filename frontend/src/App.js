@@ -1,51 +1,44 @@
-import { useEffect } from "react";
+import React from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { Toaster } from "sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Layout
+import Layout from "@/components/layout/Layout";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+// Pages
+import Dashboard from "@/pages/Dashboard";
+import StocksPage from "@/pages/StocksPage";
+import StockDetailPage from "@/pages/StockDetailPage";
+import WatchlistPage from "@/pages/WatchlistPage";
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+// Components
+import Chatbot from "@/components/chat/Chatbot";
 
 function App() {
   return (
-    <div className="App">
+    <div className="App dark">
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/stocks" element={<StocksPage />} />
+            <Route path="/stocks/:symbol" element={<StockDetailPage />} />
+            <Route path="/watchlist" element={<WatchlistPage />} />
+          </Routes>
+        </Layout>
+        <Chatbot />
+        <Toaster 
+          position="bottom-right" 
+          theme="dark"
+          toastOptions={{
+            style: {
+              background: 'hsl(0 0% 7%)',
+              border: '1px solid hsl(240 4% 16%)',
+              color: 'hsl(0 0% 98%)',
+            },
+          }}
+        />
       </BrowserRouter>
     </div>
   );
