@@ -117,11 +117,7 @@ POPULAR_STOCKS = [
 ]
 
 import random
-from twelvedata import TDClient
-
-# Initialize Twelve Data client
-TWELVE_DATA_API_KEY = os.environ.get('TWELVE_DATA_API_KEY')
-td_client = TDClient(apikey=TWELVE_DATA_API_KEY) if TWELVE_DATA_API_KEY else None
+import yfinance as yf
 
 # Cache for stock data to reduce API calls
 stock_cache = {}
@@ -176,69 +172,57 @@ def get_mock_quote(symbol: str) -> dict:
         "fifty_two_week_low": round(base["price"] * 0.65, 2),
     }
 
-async def fetch_twelve_data_quote(symbol: str) -> Optional[dict]:
-    """Fetch stock quote from Twelve Data API"""
-    if not td_client:
-        return None
-    
-    # Check cache
-    cache_key = f"quote_{symbol}"
-    if cache_key in stock_cache:
-        if (datetime.now(timezone.utc).timestamp() - cache_timestamp.get(cache_key, 0)) < CACHE_DURATION:
-            return stock_cache[cache_key]
-    
+def _fetch_yf_quote_sync(symbol: str) -> Optional[dict]:
+    """Synchronous yfinance quote fetch (runs in thread pool)"""
+    yf_symbol = f"{symbol}.IS"
     try:
-        # Twelve Data uses symbol format like "THYAO" with exchange "XIST"
-        ts = td_client.time_series(
-            symbol=symbol,
-            exchange="XIST",
-            interval="1day",
-            outputsize=2
-        )
-        df = ts.as_pandas()
-        
-        if df is not None and len(df) > 0:
-            latest = df.iloc[0]
-            prev = df.iloc[1] if len(df) > 1 else df.iloc[0]
-            
-            current_price = float(latest['close'])
-            prev_close = float(prev['close'])
+        ticker = yf.Ticker(yf_symbol)
+        hist = ticker.history(period="5d")
+        if hist is not None and len(hist) >= 2:
+            latest = hist.iloc[-1]
+            prev = hist.iloc[-2]
+            current_price = float(latest['Close'])
+            prev_close = float(prev['Close'])
             change = current_price - prev_close
             change_percent = (change / prev_close * 100) if prev_close else 0
-            
-            result = {
+            fast_info = ticker.fast_info
+            year_high = getattr(fast_info, 'year_high', None) or round(current_price * 1.2, 2)
+            year_low = getattr(fast_info, 'year_low', None) or round(current_price * 0.8, 2)
+            return {
                 "symbol": symbol,
                 "price": round(current_price, 2),
                 "change": round(change, 2),
                 "change_percent": round(change_percent, 2),
-                "high": round(float(latest['high']), 2),
-                "low": round(float(latest['low']), 2),
-                "open_price": round(float(latest['open']), 2),
+                "high": round(float(latest['High']), 2),
+                "low": round(float(latest['Low']), 2),
+                "open_price": round(float(latest['Open']), 2),
                 "close_price": round(prev_close, 2),
-                "volume": int(latest['volume']) if 'volume' in latest else 0,
-                "fifty_two_week_high": round(current_price * 1.2, 2),
-                "fifty_two_week_low": round(current_price * 0.8, 2),
+                "volume": int(latest['Volume']) if latest['Volume'] else 0,
+                "fifty_two_week_high": round(float(year_high), 2),
+                "fifty_two_week_low": round(float(year_low), 2),
             }
-            
-            # Update cache
-            stock_cache[cache_key] = result
-            cache_timestamp[cache_key] = datetime.now(timezone.utc).timestamp()
-            
-            return result
     except Exception as e:
-        logging.warning(f"Twelve Data API error for {symbol}: {e}")
-    
+        logging.warning(f"yfinance quote error for {symbol}: {e}")
     return None
 
-async def fetch_stock_quote(symbol: str) -> Optional[dict]:
-    """Fetch stock quote - tries Twelve Data first, then mock data"""
-    # Try Twelve Data API first
-    result = await fetch_twelve_data_quote(symbol)
+async def fetch_yfinance_quote(symbol: str) -> Optional[dict]:
+    """Fetch stock quote from Yahoo Finance (free, no API key required)"""
+    cache_key = f"quote_{symbol}"
+    if cache_key in stock_cache:
+        if (datetime.now(timezone.utc).timestamp() - cache_timestamp.get(cache_key, 0)) < CACHE_DURATION:
+            return stock_cache[cache_key]
+    result = await asyncio.to_thread(_fetch_yf_quote_sync, symbol)
     if result:
-        logging.info(f"Got real data for {symbol} from Twelve Data")
+        stock_cache[cache_key] = result
+        cache_timestamp[cache_key] = datetime.now(timezone.utc).timestamp()
+        logging.info(f"Got real data for {symbol} from Yahoo Finance")
+    return result
+
+async def fetch_stock_quote(symbol: str) -> Optional[dict]:
+    """Fetch stock quote - tries Yahoo Finance first, then mock data"""
+    result = await fetch_yfinance_quote(symbol)
+    if result:
         return result
-    
-    # Fall back to mock data
     logging.info(f"Using mock data for {symbol}")
     return get_mock_quote(symbol)
 
@@ -275,51 +259,37 @@ async def fetch_yahoo_details(symbol: str) -> Optional[dict]:
         "description": f"{symbol} Borsa İstanbul'da işlem gören bir Türk şirketidir. Bu veriler eğitim amaçlıdır ve gerçek zamanlı değildir."
     }
 
-async def fetch_twelve_data_history(symbol: str, period: str = "1mo") -> List[dict]:
-    """Fetch historical data from Twelve Data API"""
-    if not td_client:
-        return []
-    
-    # Map period to outputsize
+def _fetch_yf_history_sync(symbol: str, period: str) -> List[dict]:
+    """Synchronous yfinance history fetch (runs in thread pool)"""
+    yf_symbol = f"{symbol}.IS"
     period_map = {
-        "1d": 1, "5d": 5, "1mo": 22, "3mo": 66, 
-        "6mo": 132, "1y": 252, "2y": 504, "5y": 1260, "max": 2000
+        "1d": "1d", "5d": "5d", "1mo": "1mo", "3mo": "3mo",
+        "6mo": "6mo", "1y": "1y", "2y": "2y", "5y": "5y", "max": "max"
     }
-    outputsize = period_map.get(period, 22)
-    
+    yf_period = period_map.get(period, "1mo")
     try:
-        ts = td_client.time_series(
-            symbol=symbol,
-            exchange="XIST",
-            interval="1day",
-            outputsize=outputsize
-        )
-        df = ts.as_pandas()
-        
-        if df is not None and len(df) > 0:
+        ticker = yf.Ticker(yf_symbol)
+        hist = ticker.history(period=yf_period)
+        if hist is not None and not hist.empty:
             history = []
-            for idx, row in df.iterrows():
+            for idx, row in hist.iterrows():
                 history.append({
                     "date": idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)[:10],
-                    "open": round(float(row['open']), 2),
-                    "high": round(float(row['high']), 2),
-                    "low": round(float(row['low']), 2),
-                    "close": round(float(row['close']), 2),
-                    "volume": int(row['volume']) if 'volume' in row else 0
+                    "open": round(float(row['Open']), 2),
+                    "high": round(float(row['High']), 2),
+                    "low": round(float(row['Low']), 2),
+                    "close": round(float(row['Close']), 2),
+                    "volume": int(row['Volume']) if row['Volume'] else 0
                 })
-            # Reverse to get oldest first
-            history.reverse()
-            logging.info(f"Got {len(history)} historical data points for {symbol} from Twelve Data")
+            logging.info(f"Got {len(history)} historical points for {symbol} from Yahoo Finance")
             return history
     except Exception as e:
-        logging.warning(f"Twelve Data history error for {symbol}: {e}")
-    
+        logging.warning(f"yfinance history error for {symbol}: {e}")
     return []
 
 async def fetch_yahoo_history(symbol: str, period: str = "1mo") -> List[dict]:
-    """Fetch historical data - tries Twelve Data first, then mock"""
-    # Try Twelve Data first
-    history = await fetch_twelve_data_history(symbol, period)
+    """Fetch historical data - tries Yahoo Finance first, then mock"""
+    history = await asyncio.to_thread(_fetch_yf_history_sync, symbol, period)
     if history:
         return history
     

@@ -1,60 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { POPULAR_STOCKS, getMockQuote, SYMBOL_TO_SECTOR, MOCK_STOCK_DATA } from '@/lib/stocks'
+import { POPULAR_STOCKS, getMockQuote, SYMBOL_TO_SECTOR } from '@/lib/stocks'
 
-// Cache for Twelve Data API
+// Cache for Yahoo Finance data
 const stockCache: Record<string, { data: any; timestamp: number }> = {}
 const CACHE_DURATION = 300000 // 5 minutes
 
-async function fetchTwelveDataQuote(symbol: string) {
+async function fetchYahooQuote(symbol: string) {
   const cacheKey = `quote_${symbol}`
   const cached = stockCache[cacheKey]
-  
+
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data
   }
-  
-  const apiKey = process.env.TWELVE_DATA_API_KEY
-  if (!apiKey) return null
-  
+
   try {
+    const yfSymbol = `${symbol}.IS`
     const response = await fetch(
-      `https://api.twelvedata.com/time_series?symbol=${symbol}&exchange=XIST&interval=1day&outputsize=2&apikey=${apiKey}`
+      `https://query1.finance.yahoo.com/v8/finance/chart/${yfSymbol}?interval=1d&range=5d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' }, next: { revalidate: 300 } }
     )
     const data = await response.json()
-    
-    if (data.values && data.values.length > 0) {
-      const latest = data.values[0]
-      const prev = data.values[1] || data.values[0]
-      
-      const currentPrice = parseFloat(latest.close)
-      const prevClose = parseFloat(prev.close)
-      const change = currentPrice - prevClose
-      const changePercent = (change / prevClose) * 100
-      
-      const stockInfo = POPULAR_STOCKS.find(s => s.symbol === symbol)
-      
-      const result = {
-        symbol,
-        name: stockInfo?.name || symbol,
-        price: Math.round(currentPrice * 100) / 100,
-        change: Math.round(change * 100) / 100,
-        change_percent: Math.round(changePercent * 100) / 100,
-        high: Math.round(parseFloat(latest.high) * 100) / 100,
-        low: Math.round(parseFloat(latest.low) * 100) / 100,
-        open_price: Math.round(parseFloat(latest.open) * 100) / 100,
-        close_price: Math.round(prevClose * 100) / 100,
-        volume: parseInt(latest.volume || '0'),
-        fifty_two_week_high: Math.round(currentPrice * 1.2 * 100) / 100,
-        fifty_two_week_low: Math.round(currentPrice * 0.8 * 100) / 100,
-      }
-      
-      stockCache[cacheKey] = { data: result, timestamp: Date.now() }
-      return result
+    const result_data = data?.chart?.result?.[0]
+    if (!result_data) return null
+
+    const meta = result_data.meta
+    const quotes = result_data.indicators?.quote?.[0]
+    const timestamps = result_data.timestamp
+
+    if (!quotes || !timestamps || timestamps.length < 2) return null
+
+    const lastIdx = timestamps.length - 1
+    const prevIdx = lastIdx - 1
+
+    const currentPrice = quotes.close[lastIdx]
+    const prevClose = quotes.close[prevIdx]
+    if (!currentPrice || !prevClose) return null
+
+    const change = currentPrice - prevClose
+    const changePercent = (change / prevClose) * 100
+    const stockInfo = POPULAR_STOCKS.find(s => s.symbol === symbol)
+
+    const result = {
+      symbol,
+      name: stockInfo?.name || symbol,
+      price: Math.round(currentPrice * 100) / 100,
+      change: Math.round(change * 100) / 100,
+      change_percent: Math.round(changePercent * 100) / 100,
+      high: Math.round((quotes.high[lastIdx] || currentPrice) * 100) / 100,
+      low: Math.round((quotes.low[lastIdx] || currentPrice) * 100) / 100,
+      open_price: Math.round((quotes.open[lastIdx] || currentPrice) * 100) / 100,
+      close_price: Math.round(prevClose * 100) / 100,
+      volume: quotes.volume[lastIdx] || 0,
+      fifty_two_week_high: Math.round((meta.fiftyTwoWeekHigh || currentPrice * 1.2) * 100) / 100,
+      fifty_two_week_low: Math.round((meta.fiftyTwoWeekLow || currentPrice * 0.8) * 100) / 100,
     }
+
+    stockCache[cacheKey] = { data: result, timestamp: Date.now() }
+    return result
   } catch (error) {
-    console.error(`Twelve Data error for ${symbol}:`, error)
+    console.error(`Yahoo Finance error for ${symbol}:`, error)
   }
-  
+
   return null
 }
 
@@ -74,14 +80,14 @@ export async function GET(
 ) {
   const symbol = params.symbol.toUpperCase()
   const stockInfo = POPULAR_STOCKS.find(s => s.symbol === symbol)
-  
+
   if (!stockInfo) {
     return NextResponse.json({ error: 'Hisse bulunamadı' }, { status: 404 })
   }
-  
+
   try {
-    const quote = await fetchTwelveDataQuote(symbol) || getMockQuote(symbol)
-    
+    const quote = await fetchYahooQuote(symbol) || getMockQuote(symbol)
+
     const fundamentals = MOCK_FUNDAMENTALS[symbol] || {
       market_cap: Math.floor(Math.random() * 200000000000) + 50000000000,
       pe_ratio: Math.round((5 + Math.random() * 20) * 100) / 100,
@@ -90,7 +96,7 @@ export async function GET(
       sector: SYMBOL_TO_SECTOR[symbol] || "Endüstriyel",
       industry: "Çeşitli"
     }
-    
+
     return NextResponse.json({
       ...quote,
       ...fundamentals,
