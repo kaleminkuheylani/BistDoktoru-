@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { POPULAR_STOCKS, getMockQuote, SYMBOL_TO_SECTOR, SECTOR_DATA } from '@/lib/stocks'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  })
+}
 
 // Store chat histories (in production, use Redis or database)
 const chatHistories: Record<string, { role: 'user' | 'assistant'; content: string }[]> = {}
@@ -130,6 +132,7 @@ ${stockContext}`
       chatHistories[session] = chatHistories[session].slice(-10)
     }
     
+    const openai = getOpenAIClient()
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
