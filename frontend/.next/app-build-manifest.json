@@ -1,0 +1,52 @@
+{
+  "pages": {
+    "/_not-found/page": [
+      "static/chunks/webpack-1214e4bd8911037e.js",
+      "static/chunks/fd9d1056-3b379d255e5b12ed.js",
+      "static/chunks/23-b3994235d5d1436e.js",
+      "static/chunks/main-app-ea0bad449de17305.js",
+      "static/chunks/app/_not-found/page-7f232cae2b232b85.js"
+    ],
+    "/layout": [
+      "static/chunks/webpack-1214e4bd8911037e.js",
+      "static/chunks/fd9d1056-3b379d255e5b12ed.js",
+      "static/chunks/23-b3994235d5d1436e.js",
+      "static/chunks/main-app-ea0bad449de17305.js",
+      "static/css/0475e327eb228140.css",
+      "static/chunks/app/layout-4e1c023fcb03076f.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-1214e4bd8911037e.js",
+      "static/chunks/fd9d1056-3b379d255e5b12ed.js",
+      "static/chunks/23-b3994235d5d1436e.js",
+      "static/chunks/main-app-ea0bad449de17305.js",
+      "static/chunks/157-a800aab7c604047b.js",
+      "static/chunks/app/page-1b604f3f12105a2f.js"
+    ],
+    "/stocks/[symbol]/page": [
+      "static/chunks/webpack-1214e4bd8911037e.js",
+      "static/chunks/fd9d1056-3b379d255e5b12ed.js",
+      "static/chunks/23-b3994235d5d1436e.js",
+      "static/chunks/main-app-ea0bad449de17305.js",
+      "static/chunks/157-a800aab7c604047b.js",
+      "static/chunks/547-5b2d0c9e28e1d0be.js",
+      "static/chunks/app/stocks/[symbol]/page-4e073962a82e7392.js"
+    ],
+    "/stocks/page": [
+      "static/chunks/webpack-1214e4bd8911037e.js",
+      "static/chunks/fd9d1056-3b379d255e5b12ed.js",
+      "static/chunks/23-b3994235d5d1436e.js",
+      "static/chunks/main-app-ea0bad449de17305.js",
+      "static/chunks/157-a800aab7c604047b.js",
+      "static/chunks/app/stocks/page-e7f99ea95973e9fc.js"
+    ],
+    "/watchlist/page": [
+      "static/chunks/webpack-1214e4bd8911037e.js",
+      "static/chunks/fd9d1056-3b379d255e5b12ed.js",
+      "static/chunks/23-b3994235d5d1436e.js",
+      "static/chunks/main-app-ea0bad449de17305.js",
+      "static/chunks/157-a800aab7c604047b.js",
+      "static/chunks/app/watchlist/page-5c31e39c6680a39f.js"
+    ]
+  }
+}
